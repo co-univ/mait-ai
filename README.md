@@ -7,7 +7,7 @@
 - Java Spring 백엔드가 REST API 형태로 호출
 
 ## 구조
-\`\`\`
+```
 ai-server/
 ├── app/
 │   ├── main.py
@@ -26,7 +26,7 @@ ai-server/
 ├── requirements.txt
 ├── .env
 └── README.md
-\`\`\`
+```
 
 ## 빠른 시작
 1. \`pip install -r requirements.txt\`  
