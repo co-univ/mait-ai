@@ -5,3 +5,4 @@ openai
 markdown
 pdfminer.six
 aiofiles
+httpx
