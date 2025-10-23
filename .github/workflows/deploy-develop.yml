@@ -101,7 +101,7 @@ jobs:
 
             echo ""
             echo "🏥 헬스 체크:"
-            if curl -f http://localhost:8000/health; then
+            if curl -f ${{ secrets.DEV_AI_BASE_URL }}/api/ai/health; then
               echo "✅ 헬스 체크 성공!"
             else
               echo "⚠️ 헬스 체크 실패"
