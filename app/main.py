@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.api.router import router
+from app.api.health import router as health_router
 
 app = FastAPI(
     title="Java-Backend->Python-AI-Server",
@@ -21,6 +22,7 @@ app.add_middleware(
 
 # 라우터 등록 (prefix 붙이기)
 app.include_router(router, prefix="/api/ai")
+app.include_router(health_router, prefix="/api/ai")
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
