@@ -4,13 +4,24 @@ import boto3
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse, unquote
-from app.services.file_parser import parse_pdf
+from app.services.file_parser import parse_pdf, parse_raw_by_extension
 
 async def download_file_from_url(url: str) -> bytes:
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
         response.raise_for_status()  # 응답 상태 코드가 200이 아니면 예외 발생
         return response.content
+    
+async def parse_text_from_url(url: str) -> str:
+    """
+    URL 확장자(.md/.pdf)에 따라 다운로드 후 텍스트 파싱
+    """
+    content = await download_file_from_url(url)
+    from urllib.parse import urlparse
+    ext = Path(urlparse(url).path).suffix.lower()
+    if ext not in [".md", ".pdf"]:
+        raise ValueError("지원하지 않는 파일 형식입니다. (.md 또는 .pdf)")
+    return await parse_raw_by_extension(content, ext) 
 
 async def read_pdf_from_url(url: str) -> str:
     """
