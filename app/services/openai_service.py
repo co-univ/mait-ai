@@ -6,7 +6,7 @@ client = OpenAI(api_key=settings.OPENAI_API_KEY)
 SYSTEM_PROMPT = """
 너는 교육용 문제를 생성하는 AI 출제 도우미야.
 입력으로 '주제', '난이도', '교육자료'가 주어지면, 
-다음 4가지 문제 유형을 JSON 형태로 생성해야 해.
+요청된 유형과 개수에 맞춰 다음 문제 유형들을 JSON으로 생성해야 해.
 
 # 문제 유형
 
@@ -141,34 +141,53 @@ SYSTEM_PROMPT = """
 3. 모든 문자열은 비어있지 않아야 함
 4. 숫자 필드는 0 이상의 정수
 
-출력은 다음 JSON 배열로 구성되어야 함:
-[
-  { "questionType": "MULTIPLE", ... },
-  { "questionType": "SHORT", ... },
-  { "questionType": "FILL_BLANK", ... },
-  { "questionType": "ORDERING", ... }
-]
+출력은 문제 객체들의 JSON 배열로 구성되어야 함. 각 객체는 위에서 정의한 형식을 따르며, 반드시 `questionType`을 포함해야 함. 개수가 0으로 지정된 유형은 포함하지 않음.
 
 ⚠️ 절대 JSON 이외의 설명이나 문장을 포함하지 마세요.
 """
 
-def build_user_prompt(topic: str, difficulty: str, material: str) -> str:
+def build_user_prompt(
+    topic: str,
+    difficulty: str,
+    material: str,
+    instruction: str | None = None,
+    counts: dict[str, int] | None = None,
+) -> str:
+    counts_lines = ""
+    if counts:
+        # 정렬은 보기 좋게 고정 순서로
+        type_order = ["MULTIPLE", "SHORT", "FILL_BLANK", "ORDERING"]
+        pairs = [f"- {t}: {counts.get(t, 0)}" for t in type_order]
+        counts_lines = "\n".join(pairs)
+
+    instruction_block = f"\n문제 제작 지시사항:\n{instruction}\n" if instruction else ""
+    counts_block = f"\n유형별 개수 요구사항:\n{counts_lines}\n" if counts_lines else ""
+
     return f"""
 주제: {topic}
 난이도: {difficulty}
 교육자료:
 {material}
-
-위 내용을 기반으로, 4가지 문제 유형을 위 JSON 형식으로 작성해줘.
+{instruction_block}{counts_block}
+요청사항:
+- 각 문제 유형별로 지정된 개수만큼 생성 (0이면 생략)
+- 총 문제 수는 지정된 개수의 합과 일치
+- 반드시 JSON 배열만 반환 (추가 설명 금지)
 """
 
-async def generate_question_set(topic: str, difficulty: str, material: str):
+async def generate_question_set(
+    topic: str,
+    difficulty: str,
+    material: str,
+    instruction: str | None = None,
+    counts: dict[str, int] | None = None,
+):
     try:
         response = client.responses.create(
             model="gpt-4.1-mini",
             input=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_user_prompt(topic, difficulty, material)}
+                {"role": "user", "content": build_user_prompt(topic, difficulty, material, instruction, counts)}
             ],
             max_output_tokens=8000
             # temperature=0.7,
