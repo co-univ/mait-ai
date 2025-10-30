@@ -38,7 +38,13 @@ async def generate_from_url_endpoint(req: GenerateFromURLRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"파일을 다운로드할 수 없습니다: {e}")
 
-    result = await generate_question_set(req.title, req.difficulty, text)
+    result = await generate_question_set(
+        req.title,
+        req.difficulty,
+        text,
+        req.instruction,
+        req.counts,
+    )
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return GenerateResponse(content=result["content"])
