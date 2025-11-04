@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from app.models.schemas import GenerateRequest, GenerateResponse, ParseFileResponse, ParseURLRequest, GenerateFromURLRequest
+from app.models.schemas import GenerateResponse, ParseFileResponse, ParseURLRequest, GenerateFromURLRequest
 from app.services.openai_service import generate_question_set
 from app.services.file_parser import parse_markdown, parse_pdf
 from app.utils.utils import download_file_from_url, parse_text_from_url
@@ -39,7 +39,7 @@ async def generate_from_url_endpoint(req: GenerateFromURLRequest):
         raise HTTPException(status_code=400, detail=f"파일을 다운로드할 수 없습니다: {e}")
 
     result = await generate_question_set(
-        req.title,
+        req.subject,
         req.difficulty,
         text,
         req.instruction,
