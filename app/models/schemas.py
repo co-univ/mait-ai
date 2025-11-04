@@ -1,10 +1,5 @@
 from pydantic import BaseModel, HttpUrl, Field
 
-class GenerateRequest(BaseModel):
-    title: str
-    difficulty: str
-    material: str
-
 class GenerateResponse(BaseModel):
     content: str
 
@@ -15,7 +10,7 @@ class ParseURLRequest(BaseModel):
     url: HttpUrl
 
 class GenerateFromURLRequest(BaseModel):
-    title: str
+    subject: str
     difficulty: str
     url: HttpUrl
     instruction: str = Field(
