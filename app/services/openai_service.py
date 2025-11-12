@@ -291,11 +291,13 @@ def _ensure_single_main_per_group(answers: list[dict]) -> None:
         if not true_indices:
             # 메인 없음: 첫 항목을 메인으로 설정
             keep_idx = indices[0]
+            print(f"[SANITIZER] number={num} 그룹에 메인 없음 → 인덱스 {keep_idx}를 isMain=true로 설정")
             for i in indices:
                 answers[i]["isMain"] = (i == keep_idx)
         elif len(true_indices) > 1:
             # 메인 2개 이상: 첫 메인만 유지, 나머지 false
             keep_idx = true_indices[0]
+            print(f"[SANITIZER] number={num} 그룹에 메인 {len(true_indices)}개 → 인덱스 {keep_idx}만 유지, 나머지 false")
             for i in indices:
                 answers[i]["isMain"] = (i == keep_idx)
         # 이미 정확히 1개면 수정 불필요
@@ -307,24 +309,32 @@ def _sanitize_questions(questions: list[dict]) -> list[dict]:
     - MULTIPLE: answerCount를 isCorrect 개수로 동기화
     """
     if not questions:
+        print("[SANITIZER] questions가 비어있음")
         return questions
-    for q in questions:
+    print(f"[SANITIZER] 총 {len(questions)}개 문제 처리 시작")
+    for idx, q in enumerate(questions):
         if not isinstance(q, dict):
+            print(f"[SANITIZER] 인덱스 {idx}: dict가 아님, 스킵")
             continue
         qtype = q.get("questionType", "").upper()
+        print(f"[SANITIZER] 인덱스 {idx}: questionType={qtype}")
         # 타입이 명시된 경우
         if qtype == "SHORT":
             answers = q.get("answers")
             if isinstance(answers, list) and answers:
+                print(f"[SANITIZER] SHORT 처리: {len(answers)}개 답안")
                 _ensure_single_main_per_group(answers)
                 # 메인 개수로 answerCount 동기화
                 main_numbers = {a.get("number") for a in answers if bool(a.get("isMain"))}
                 q["answerCount"] = max(1, len(main_numbers)) if main_numbers else 1
+                print(f"[SANITIZER] SHORT 보정 완료: answerCount={q['answerCount']}")
             continue
         if qtype == "FILL_BLANK":
             answers = q.get("answers")
             if isinstance(answers, list) and answers:
+                print(f"[SANITIZER] FILL_BLANK 처리: {len(answers)}개 답안")
                 _ensure_single_main_per_group(answers)
+                print(f"[SANITIZER] FILL_BLANK 보정 완료")
             continue
         if qtype == "MULTIPLE":
             choices = q.get("choices")
@@ -425,16 +435,18 @@ async def generate_question_set(
                 return {"error": "모델 응답(JSON 추출본) 파싱에 실패했습니다."}
         if not isinstance(parsed, list):
             return {"error": "최상위 응답은 JSON 배열이어야 합니다."}
-        # 규칙 위반 보정
-        sanitized = _sanitize_questions(parsed)
-        # 디버깅: 보정 전후 비교
+        # 디버깅: 보정 전 상태 (깊은 복사로 보존)
+        import copy
+        parsed_copy = copy.deepcopy(parsed)
         print(f"[DEBUG] 보정 전 SHORT/FILL_BLANK isMain 상태:")
-        for q in parsed:
+        for q in parsed_copy:
             qtype = q.get("questionType", "")
             if qtype in ("SHORT", "FILL_BLANK"):
                 answers = q.get("answers", [])
                 for a in answers:
                     print(f"  {qtype}: number={a.get('number')}, isMain={a.get('isMain')}, answer={a.get('answer', '')[:30]}")
+        # 규칙 위반 보정 (in-place 수정)
+        sanitized = _sanitize_questions(parsed)
         print(f"[DEBUG] 보정 후 SHORT/FILL_BLANK isMain 상태:")
         for q in sanitized:
             qtype = q.get("questionType", "")
