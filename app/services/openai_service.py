@@ -1,5 +1,6 @@
 from openai import OpenAI
 from app.config import settings
+import json
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
@@ -258,10 +259,52 @@ def build_user_prompt(
 {material}
 {instruction_block}{counts_block}
 요청사항:
+- 반드시 유형별 생성 규칙을 지킬 것
 - 각 문제 유형별로 지정된 개수만큼 생성 (0이면 생략)
 - 총 문제 수는 지정된 개수의 합과 일치
 - 반드시 JSON 배열만 반환 (추가 설명 금지)
 """
+
+def _ensure_single_main_per_group(answers: list[dict]) -> None:
+    # 같은 number 그룹 내에서 isMain이 정확히 1개가 되도록 보정
+    from collections import defaultdict
+    groups: dict[int, list[int]] = defaultdict(list)
+    for idx, ans in enumerate(answers or []):
+        num = ans.get("number")
+        if isinstance(num, int):
+            groups[num].append(idx)
+    for indices in groups.values():
+        true_indices = [i for i in indices if bool(answers[i].get("isMain"))]
+        if not true_indices:
+            keep = indices[0]
+            for i in indices:
+                answers[i]["isMain"] = (i == keep)
+        else:
+            keep = true_indices[0]
+            for i in indices:
+                answers[i]["isMain"] = (i == keep)
+
+def _sanitize_questions(questions: list[dict]) -> list[dict]:
+    # 모델 출력 후 규칙 위반을 보정
+    for q in questions or []:
+        qtype = q.get("questionType")
+        if qtype == "SHORT":
+            answers = q.get("answers")
+            if isinstance(answers, list) and answers:
+                _ensure_single_main_per_group(answers)
+                main_numbers = {a.get("number") for a in answers if a.get("isMain")}
+                q["answerCount"] = max(1, len(main_numbers)) if main_numbers else 1
+        elif qtype == "FILL_BLANK":
+            answers = q.get("answers")
+            if isinstance(answers, list) and answers:
+                _ensure_single_main_per_group(answers)
+        elif qtype == "MULTIPLE":
+            choices = q.get("choices")
+            if isinstance(choices, list) and choices:
+                correct_count = sum(1 for c in choices if bool(c.get("isCorrect")))
+                q["answerCount"] = max(0, correct_count)
+        # ORDERING은 검증만(연속성 보정은 보류)
+    return questions
 
 async def generate_question_set(
     topic: str,
@@ -280,7 +323,6 @@ async def generate_question_set(
             max_output_tokens=8000
             # temperature=0.7,
         )
-        # GPT-5 Responses API는 output 배열을 반환하므로, 첫 번째 텍스트를 가져옴
         # return {"json": response.output[0].content[0].text}
 
         print(response)
@@ -300,7 +342,14 @@ async def generate_question_set(
 
         if not content:
             return {"error": "응답 내용을 읽을 수 없습니다."}
-
-        return {"content": content}
+        # 생성 결과 파싱 및 규칙 보정
+        try:
+            parsed = json.loads(content)
+        except Exception:
+            return {"error": "모델 응답을 JSON으로 파싱할 수 없습니다."}
+        if not isinstance(parsed, list):
+            return {"error": "최상위 응답은 JSON 배열이어야 합니다."}
+        sanitized = _sanitize_questions(parsed)
+        return {"content": sanitized}
     except Exception as e:
         return {"error": str(e)}
