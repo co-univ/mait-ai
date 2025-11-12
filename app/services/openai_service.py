@@ -19,8 +19,8 @@ SYSTEM_PROMPT = """
    - 필수 필드 존재 여부
 3) 규칙 정합성 보정
   생성된 문제를 유형별로 아래 규칙에 기반해 검증하고 보정해
-   - SHORT: `number`별로 `isMain=true` 정확히 1개 보장(없으면 첫 항목을 true, 2개 이상이면 첫 항목만 true)
-   - FILL_BLANK: content의 모든 `{{i}}`에 대해 `number=i`의 `isMain=true` 정확히 1개 보장(없으면 첫 항목을 true, 2개 이상이면 첫 항목만 true)
+   - SHORT: `number`별로 `main=true` 정확히 1개 보장(없으면 첫 항목을 true, 2개 이상이면 첫 항목만 true)
+   - FILL_BLANK: content의 모든 `{{i}}`에 대해 `number=i`의 `main=true` 정확히 1개 보장(없으면 첫 항목을 true, 2개 이상이면 첫 항목만 true)
    - MULTIPLE: `answerCount == isCorrect=true 개수`
    - ORDERING: originOrder/answerOrder의 1..N 연속성 보장
 4) 최종 검증 체크리스트 통과 후 JSON만 반환
@@ -90,18 +90,18 @@ SYSTEM_PROMPT = """
 **규칙/제약사항(유형 2 - 주관식):**
 - 기본 정답 개수는 1개(메인 답안 기준), 최대 5개까지 가능
 - answers는 최소 1개 이상
-- 메인 답안은 `isMain=true`로 표시하며 최소 1개, 최대 5개
-- 인정답안은 `isMain=false`로 추가(동의어/표기 변형), 각 메인 답안별 최대 5개까지 허용
+- 메인 답안은 `main=true`로 표시하며 최소 1개, 최대 5개
+- 인정답안은 `main=false`로 추가(동의어/표기 변형), 각 메인 답안별 최대 5개까지 허용
 - 동일 의미의 답안 묶음은 같은 `number`를 사용
-- number가 같은 답안 묶음 내에서 `isMain=true`는 정확히 1개여야 함
-- 각 `number` 그룹에서 첫 번째 답안은 기본값으로 `isMain=true`, 나머지는 기본 `false`로 생성
+- number가 같은 답안 묶음 내에서 `main=true`는 정확히 1개여야 함
+- 각 `number` 그룹에서 첫 번째 답안은 기본값으로 `main=true`, 나머지는 기본 `false`로 생성
 - 답안 삭제는 가능하나 최소 1개는 유지(1개일 때 삭제 불가)
 - answerCount는 1~5 사이 정수
 - 정답 영역에는 메인 답안만 노출(인정답안 제외)
 - number는 1부터 시작하는 연속된 정수
-  - 금지: 모든 answers가 `isMain=false`인 상태
-    - 보정: 어떤 `number` 묶음에서든 `isMain=true`가 없으면, 해당 묶음의 첫 항목을 `isMain=true`로 변경
-    - 보정: 같은 `number`에서 `isMain=true`가 2개 이상이면 첫 항목만 `true`로 두고 나머지는 `false`로 변경
+  - 금지: 모든 answers가 `main=false`인 상태
+    - 보정: 어떤 `number` 묶음에서든 `main=true`가 없으면, 해당 묶음의 첫 항목을 `main=true`로 변경
+    - 보정: 같은 `number`에서 `main=true`가 2개 이상이면 첫 항목만 `true`로 두고 나머지는 `false`로 변경
 
 {
   "questionType": "SHORT",
@@ -112,12 +112,12 @@ SYSTEM_PROMPT = """
     {
       "number": 1,
       "answer": "정답",
-      "isMain": true
+      "main": true
     },
     {
       "number": 1, 
       "answer": "정답의 인정답안(동의어/표기 변형)",
-      "isMain": false
+      "main": false
     }
   ]
 }
@@ -128,14 +128,14 @@ SYSTEM_PROMPT = """
 - 질문 작성 중 '빈칸 추가' 시 `{{i}}` 형태의 새 빈칸 생성(i는 1부터 시작)
 - content의 빈칸 번호는 좌→우, 상→하 순으로 증가하며 앞쪽 빈칸이 앞 번호
 - answers의 `number`는 content의 빈칸 번호와 일치해야 함
-- 각 빈칸 번호마다 대표 답안(`isMain=true`)은 정확히 1개여야함
-- 각 빈칸 번호 그룹에서 첫 번째 답안은 기본값으로 `isMain=true`, 나머지는 기본 `false`로 생성
-- 같은 빈칸 번호에 대해 인정답안(`isMain=false`)을 여러 개 추가 가능(최대 5개)
+- 각 빈칸 번호마다 대표 답안(`main=true`)은 정확히 1개여야함
+- 각 빈칸 번호 그룹에서 첫 번째 답안은 기본값으로 `main=true`, 나머지는 기본 `false`로 생성
+- 같은 빈칸 번호에 대해 인정답안(`main=false`)을 여러 개 추가 가능(최대 5개)
 - 빈칸 삭제: 텍스트에서 백스페이스 1회 선택, 2회 삭제 또는 Minus 클릭 시 삭제
 - 정답 영역 표기 예시: "정답 (1) A, (2) B"
-  - 금지: 어떤 빈칸 번호에서도 `isMain=true`가 0개인 상태
-    - 보정: 해당 빈칸 번호에서 `isMain=true`가 없으면 첫 항목을 `isMain=true`로 변경
-    - 보정: 해당 번호에서 `isMain=true`가 2개 이상이면 첫 항목만 `true`로 두고 나머지는 `false`로 변경
+  - 금지: 어떤 빈칸 번호에서도 `main=true`가 0개인 상태
+    - 보정: 해당 빈칸 번호에서 `main=true`가 없으면 첫 항목을 `main=true`로 변경
+    - 보정: 해당 번호에서 `main=true`가 2개 이상이면 첫 항목만 `true`로 두고 나머지는 `false`로 변경
 
 {
   "questionType": "FILL_BLANK",
@@ -145,17 +145,17 @@ SYSTEM_PROMPT = """
     {
       "number": 1,
       "answer": "사과",
-      "isMain": true
+      "main": true
     },
     {
       "number": 1,
       "answer": "애플", 
-      "isMain": false
+      "main": false
     },
     {
       "number": 2,
       "answer": "배",
-      "isMain": true
+      "main": true
     }
   ]
 }
@@ -218,16 +218,16 @@ SYSTEM_PROMPT = """
 [SHORT]
 - answers 길이 ≥ 1
 - `number`는 1부터 시작하는 연속 정수
-- 동일 `number` 묶음 내 `isMain=true`는 정확히 1개
-- 인정답안은 메인과 동일 `number`로 `isMain=false`
+- 동일 `number` 묶음 내 `main=true`는 정확히 1개
+- 인정답안은 메인과 동일 `number`로 `main=false`
 - `answerCount` == 서로 다른 `number`(=메인 답안) 개수, 1~5 범위
-- 정답 영역에는 `isMain=true`인 항목만 해당 내용이 노출됨(인정답안 제외)
-  - 금지: 어떤 `number`에서도 `isMain=true`가 0개인 상태
+- 정답 영역에는 `main=true`인 항목만 해당 내용이 노출됨(인정답안 제외)
+  - 금지: 어떤 `number`에서도 `main=true`가 0개인 상태
 
 [FILL_BLANK]
 - content의 `{{i}}` 인덱스(i는 1부터 시작)와 answers의 `number`가 일치
-- 각 빈칸 번호마다 `isMain=true` 정확히 1개, 인정답안은 동일 번호 `isMain=false`
-  - 금지: 어떤 빈칸 번호에서도 `isMain=true`가 0개인 상태
+- 각 빈칸 번호마다 `main=true` 정확히 1개, 인정답안은 동일 번호 `main=false`
+  - 금지: 어떤 빈칸 번호에서도 `main=true`가 0개인 상태
 
 [ORDERING]
 - options 길이: 2 이상(권장 기본 3, 최대 6)
@@ -269,8 +269,8 @@ def build_user_prompt(
 
 def _ensure_single_main_per_group(answers: list[dict]) -> None:
     """
-    같은 number 그룹 내에서 isMain이 정확히 1개가 되도록 보정.
-    - 메인 없음: 첫 항목을 isMain=true로 설정
+    같은 number 그룹 내에서 main이 정확히 1개가 되도록 보정.
+    - 메인 없음: 첫 항목을 main=true로 설정
     - 메인 2개 이상: 첫 메인만 true, 나머지 false
     """
     if not answers:
@@ -286,30 +286,30 @@ def _ensure_single_main_per_group(answers: list[dict]) -> None:
     for num, indices in groups.items():
         if not indices:
             continue
-        # 현재 isMain=true인 인덱스 찾기
-        true_indices = [i for i in indices if bool(answers[i].get("isMain"))]
+        # 현재 main=true인 인덱스 찾기
+        true_indices = [i for i in indices if bool(answers[i].get("main"))]
         if not true_indices:
             # 메인 없음: 첫 항목을 메인으로 설정
             keep_idx = indices[0]
-            print(f"[SANITIZER] number={num} 그룹에 메인 없음 → 인덱스 {keep_idx}를 isMain=True로 설정")
+            print(f"[SANITIZER] number={num} 그룹에 메인 없음 → 인덱스 {keep_idx}를 main=True로 설정")
             for i in indices:
-                answers[i]["isMain"] = True if (i == keep_idx) else False
+                answers[i]["main"] = True if (i == keep_idx) else False
             # 보정 후 확인
-            print(f"[SANITIZER] 보정 후 확인: {[(answers[j].get('answer', '')[:20], answers[j].get('isMain')) for j in indices]}")
+            print(f"[SANITIZER] 보정 후 확인: {[(answers[j].get('answer', '')[:20], answers[j].get('main')) for j in indices]}")
         elif len(true_indices) > 1:
             # 메인 2개 이상: 첫 메인만 유지, 나머지 false
             keep_idx = true_indices[0]
             print(f"[SANITIZER] number={num} 그룹에 메인 {len(true_indices)}개 → 인덱스 {keep_idx}만 유지, 나머지 False")
             for i in indices:
-                answers[i]["isMain"] = True if (i == keep_idx) else False
+                answers[i]["main"] = True if (i == keep_idx) else False
             # 보정 후 확인
-            print(f"[SANITIZER] 보정 후 확인: {[(answers[j].get('answer', '')[:20], answers[j].get('isMain')) for j in indices]}")
+            print(f"[SANITIZER] 보정 후 확인: {[(answers[j].get('answer', '')[:20], answers[j].get('main')) for j in indices]}")
         # 이미 정확히 1개면 수정 불필요
 
 def _sanitize_questions(questions: list[dict]) -> list[dict]:
     """
     모델 출력 후 규칙 위반을 보정.
-    - SHORT/FILL_BLANK: 각 number 그룹마다 isMain=true 정확히 1개 보장
+    - SHORT/FILL_BLANK: 각 number 그룹마다 main=true 정확히 1개 보장
     - MULTIPLE: answerCount를 isCorrect 개수로 동기화
     """
     if not questions:
@@ -329,7 +329,7 @@ def _sanitize_questions(questions: list[dict]) -> list[dict]:
                 print(f"[SANITIZER] SHORT 처리: {len(answers)}개 답안")
                 _ensure_single_main_per_group(answers)
                 # 메인 개수로 answerCount 동기화
-                main_numbers = {a.get("number") for a in answers if bool(a.get("isMain"))}
+                main_numbers = {a.get("number") for a in answers if bool(a.get("main"))}
                 q["answerCount"] = max(1, len(main_numbers)) if main_numbers else 1
                 print(f"[SANITIZER] SHORT 보정 완료: answerCount={q['answerCount']}")
             continue
@@ -358,7 +358,7 @@ def _sanitize_questions(questions: list[dict]) -> list[dict]:
             if answers:
                 _ensure_single_main_per_group(answers)
                 # SHORT/FILL_BLANK 공통: 메인 개수로 answerCount 동기화(존재 시)
-                main_numbers = {a.get("number") for a in answers if bool(a.get("isMain"))}
+                main_numbers = {a.get("number") for a in answers if bool(a.get("main"))}
                 if "answerCount" in q:
                     q["answerCount"] = max(1, len(main_numbers)) if main_numbers else 1
     return questions
@@ -442,22 +442,22 @@ async def generate_question_set(
         # 디버깅: 보정 전 상태 (깊은 복사로 보존)
         import copy
         parsed_copy = copy.deepcopy(parsed)
-        print(f"[DEBUG] 보정 전 SHORT/FILL_BLANK isMain 상태:")
+        print(f"[DEBUG] 보정 전 SHORT/FILL_BLANK main 상태:")
         for q in parsed_copy:
             qtype = q.get("questionType", "")
             if qtype in ("SHORT", "FILL_BLANK"):
                 answers = q.get("answers", [])
                 for a in answers:
-                    print(f"  {qtype}: number={a.get('number')}, isMain={a.get('isMain')}, answer={a.get('answer', '')[:30]}")
+                    print(f"  {qtype}: number={a.get('number')}, main={a.get('main')}, answer={a.get('answer', '')[:30]}")
         # 규칙 위반 보정 (in-place 수정)
         sanitized = _sanitize_questions(parsed)
-        print(f"[DEBUG] 보정 후 SHORT/FILL_BLANK isMain 상태:")
+        print(f"[DEBUG] 보정 후 SHORT/FILL_BLANK main 상태:")
         for q in sanitized:
             qtype = q.get("questionType", "")
             if qtype in ("SHORT", "FILL_BLANK"):
                 answers = q.get("answers", [])
                 for a in answers:
-                    print(f"  {qtype}: number={a.get('number')}, isMain={a.get('isMain')}, answer={a.get('answer', '')[:30]}")
+                    print(f"  {qtype}: number={a.get('number')}, main={a.get('main')}, answer={a.get('answer', '')[:30]}")
         # JSON 문자열로 직렬화하여 반환
         json_str = json.dumps(sanitized, ensure_ascii=False)
         # 직렬화 후 값 확인 (디버깅)
@@ -469,8 +469,22 @@ async def generate_question_set(
                 if qtype in ("SHORT", "FILL_BLANK"):
                     answers = q.get("answers", [])
                     for a in answers:
-                        is_main = a.get("isMain")
-                        print(f"  {qtype}: number={a.get('number')}, isMain={is_main} (type: {type(is_main).__name__}), answer={a.get('answer', '')[:30]}")
+                        is_main = a.get("main")
+                        print(f"  {qtype}: number={a.get('number')}, main={is_main} (type: {type(is_main).__name__}), answer={a.get('answer', '')[:30]}")
+            # JSON 문자열에서 SHORT/FILL_BLANK의 main 값 직접 확인
+            import re
+            # SHORT/FILL_BLANK 문제의 main 값 추출
+            for q in verify:
+                qtype = q.get("questionType", "")
+                if qtype in ("SHORT", "FILL_BLANK"):
+                    # JSON 문자열에서 해당 문제 부분 찾기
+                    q_content = q.get("content", "")[:30]
+                    pattern = rf'"questionType":\s*"{qtype}"[^]]*?"answers":\s*\[(.*?)\]'
+                    match = re.search(pattern, json_str, re.DOTALL)
+                    if match:
+                        answers_json = match.group(1)
+                        is_main_values = re.findall(r'"main":\s*(true|false)', answers_json)
+                        print(f"  {qtype} ({q_content}): JSON 문자열의 main 값들 = {is_main_values}")
         except Exception as e:
             print(f"[DEBUG] JSON 검증 실패: {e}")
         return {"content": json_str}
