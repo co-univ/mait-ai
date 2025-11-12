@@ -1,6 +1,7 @@
 from openai import OpenAI
 from app.config import settings
 import json
+import re
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
@@ -288,23 +289,66 @@ def _sanitize_questions(questions: list[dict]) -> list[dict]:
     # 모델 출력 후 규칙 위반을 보정
     for q in questions or []:
         qtype = q.get("questionType")
+        # 타입이 명시된 경우
         if qtype == "SHORT":
             answers = q.get("answers")
             if isinstance(answers, list) and answers:
                 _ensure_single_main_per_group(answers)
                 main_numbers = {a.get("number") for a in answers if a.get("isMain")}
                 q["answerCount"] = max(1, len(main_numbers)) if main_numbers else 1
-        elif qtype == "FILL_BLANK":
+            continue
+        if qtype == "FILL_BLANK":
             answers = q.get("answers")
             if isinstance(answers, list) and answers:
                 _ensure_single_main_per_group(answers)
-        elif qtype == "MULTIPLE":
+            continue
+        if qtype == "MULTIPLE":
             choices = q.get("choices")
             if isinstance(choices, list) and choices:
                 correct_count = sum(1 for c in choices if bool(c.get("isCorrect")))
                 q["answerCount"] = max(0, correct_count)
-        # ORDERING은 검증만(연속성 보정은 보류)
+            continue
+        # 타입 누락 시 구조로 추론해서 보정
+        if "choices" in q and isinstance(q.get("choices"), list):
+            choices = q.get("choices")
+            correct_count = sum(1 for c in choices if bool(c.get("isCorrect")))
+            q["answerCount"] = max(0, correct_count)
+            continue
+        if "answers" in q and isinstance(q.get("answers"), list):
+            answers = q.get("answers")
+            if answers:
+                _ensure_single_main_per_group(answers)
+                # SHORT/FILL_BLANK 공통: 메인 개수로 answerCount 동기화(존재 시)
+                main_numbers = {a.get("number") for a in answers if a.get("isMain")}
+                if "answerCount" in q:
+                    q["answerCount"] = max(1, len(main_numbers)) if main_numbers else 1
     return questions
+
+def _extract_json_array(content: str) -> str | None:
+    """
+    응답 텍스트에서 JSON 배열만 안전하게 추출.
+    - 코드펜스(`````, ```json) 제거
+    - 첫 '['부터 매칭되는 ']'까지 슬라이스
+    """
+    if not isinstance(content, str):
+        return None
+    # 코드펜스 제거
+    cleaned = re.sub(r"^```(?:json)?\\s*|\\s*```$", "", content.strip(), flags=re.IGNORECASE | re.MULTILINE)
+    # 첫 '[' 위치 탐색
+    start = cleaned.find("[")
+    if start == -1:
+        return None
+    # 대괄호 매칭으로 끝 위치 탐색
+    depth = 0
+    for i in range(start, len(cleaned)):
+        ch = cleaned[i]
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+            if depth == 0:
+                return cleaned[start : i + 1]
+    return None
 
 async def generate_question_set(
     topic: str,
@@ -346,7 +390,14 @@ async def generate_question_set(
         try:
             parsed = json.loads(content)
         except Exception:
-            return {"error": "모델 응답을 JSON으로 파싱할 수 없습니다."}
+            # 코드펜스/텍스트 섞임 대비: JSON 배열만 추출하여 재시도
+            extracted = _extract_json_array(content)
+            if not extracted:
+                return {"error": "모델 응답을 JSON으로 파싱할 수 없습니다."}
+            try:
+                parsed = json.loads(extracted)
+            except Exception:
+                return {"error": "모델 응답(JSON 추출본) 파싱에 실패했습니다."}
         if not isinstance(parsed, list):
             return {"error": "최상위 응답은 JSON 배열이어야 합니다."}
         sanitized = _sanitize_questions(parsed)
