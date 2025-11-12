@@ -14,7 +14,7 @@ class ChoiceItem(BaseModel):
 class ShortAnswerItem(BaseModel):
     number: int
     answer: str
-    isMain: bool
+    main: bool
 
 
 class OrderingOption(BaseModel):

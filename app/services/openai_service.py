@@ -489,4 +489,7 @@ async def generate_question_set(
             print(f"[DEBUG] JSON 검증 실패: {e}")
         return {"content": json_str}
     except Exception as e:
-        return {"error": str(e)}
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        print(f"[ERROR] generate_question_set 실패: {error_detail}")
+        return {"error": f"문제 생성 중 오류가 발생했습니다: {str(e)}"}
