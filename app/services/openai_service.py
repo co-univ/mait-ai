@@ -291,15 +291,19 @@ def _ensure_single_main_per_group(answers: list[dict]) -> None:
         if not true_indices:
             # 메인 없음: 첫 항목을 메인으로 설정
             keep_idx = indices[0]
-            print(f"[SANITIZER] number={num} 그룹에 메인 없음 → 인덱스 {keep_idx}를 isMain=true로 설정")
+            print(f"[SANITIZER] number={num} 그룹에 메인 없음 → 인덱스 {keep_idx}를 isMain=True로 설정")
             for i in indices:
-                answers[i]["isMain"] = (i == keep_idx)
+                answers[i]["isMain"] = True if (i == keep_idx) else False
+            # 보정 후 확인
+            print(f"[SANITIZER] 보정 후 확인: {[(answers[j].get('answer', '')[:20], answers[j].get('isMain')) for j in indices]}")
         elif len(true_indices) > 1:
             # 메인 2개 이상: 첫 메인만 유지, 나머지 false
             keep_idx = true_indices[0]
-            print(f"[SANITIZER] number={num} 그룹에 메인 {len(true_indices)}개 → 인덱스 {keep_idx}만 유지, 나머지 false")
+            print(f"[SANITIZER] number={num} 그룹에 메인 {len(true_indices)}개 → 인덱스 {keep_idx}만 유지, 나머지 False")
             for i in indices:
-                answers[i]["isMain"] = (i == keep_idx)
+                answers[i]["isMain"] = True if (i == keep_idx) else False
+            # 보정 후 확인
+            print(f"[SANITIZER] 보정 후 확인: {[(answers[j].get('answer', '')[:20], answers[j].get('isMain')) for j in indices]}")
         # 이미 정확히 1개면 수정 불필요
 
 def _sanitize_questions(questions: list[dict]) -> list[dict]:
@@ -455,6 +459,20 @@ async def generate_question_set(
                 for a in answers:
                     print(f"  {qtype}: number={a.get('number')}, isMain={a.get('isMain')}, answer={a.get('answer', '')[:30]}")
         # JSON 문자열로 직렬화하여 반환
-        return {"content": json.dumps(sanitized, ensure_ascii=False)}
+        json_str = json.dumps(sanitized, ensure_ascii=False)
+        # 직렬화 후 값 확인 (디버깅)
+        try:
+            verify = json.loads(json_str)
+            print(f"[DEBUG] JSON 직렬화 후 검증:")
+            for q in verify:
+                qtype = q.get("questionType", "")
+                if qtype in ("SHORT", "FILL_BLANK"):
+                    answers = q.get("answers", [])
+                    for a in answers:
+                        is_main = a.get("isMain")
+                        print(f"  {qtype}: number={a.get('number')}, isMain={is_main} (type: {type(is_main).__name__}), answer={a.get('answer', '')[:30]}")
+        except Exception as e:
+            print(f"[DEBUG] JSON 검증 실패: {e}")
+        return {"content": json_str}
     except Exception as e:
         return {"error": str(e)}
