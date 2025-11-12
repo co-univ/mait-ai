@@ -268,34 +268,57 @@ def build_user_prompt(
 """
 
 def _ensure_single_main_per_group(answers: list[dict]) -> None:
-    # 같은 number 그룹 내에서 isMain이 정확히 1개가 되도록 보정
+    """
+    같은 number 그룹 내에서 isMain이 정확히 1개가 되도록 보정.
+    - 메인 없음: 첫 항목을 isMain=true로 설정
+    - 메인 2개 이상: 첫 메인만 true, 나머지 false
+    """
+    if not answers:
+        return
     from collections import defaultdict
     groups: dict[int, list[int]] = defaultdict(list)
-    for idx, ans in enumerate(answers or []):
+    # number별로 인덱스 그룹화
+    for idx, ans in enumerate(answers):
         num = ans.get("number")
         if isinstance(num, int):
             groups[num].append(idx)
-    for indices in groups.values():
+    # 각 그룹별로 보정
+    for num, indices in groups.items():
+        if not indices:
+            continue
+        # 현재 isMain=true인 인덱스 찾기
         true_indices = [i for i in indices if bool(answers[i].get("isMain"))]
         if not true_indices:
-            keep = indices[0]
+            # 메인 없음: 첫 항목을 메인으로 설정
+            keep_idx = indices[0]
             for i in indices:
-                answers[i]["isMain"] = (i == keep)
-        else:
-            keep = true_indices[0]
+                answers[i]["isMain"] = (i == keep_idx)
+        elif len(true_indices) > 1:
+            # 메인 2개 이상: 첫 메인만 유지, 나머지 false
+            keep_idx = true_indices[0]
             for i in indices:
-                answers[i]["isMain"] = (i == keep)
+                answers[i]["isMain"] = (i == keep_idx)
+        # 이미 정확히 1개면 수정 불필요
 
 def _sanitize_questions(questions: list[dict]) -> list[dict]:
-    # 모델 출력 후 규칙 위반을 보정
-    for q in questions or []:
-        qtype = q.get("questionType")
+    """
+    모델 출력 후 규칙 위반을 보정.
+    - SHORT/FILL_BLANK: 각 number 그룹마다 isMain=true 정확히 1개 보장
+    - MULTIPLE: answerCount를 isCorrect 개수로 동기화
+    """
+    if not questions:
+        return questions
+    for q in questions:
+        if not isinstance(q, dict):
+            continue
+        qtype = q.get("questionType", "").upper()
         # 타입이 명시된 경우
         if qtype == "SHORT":
             answers = q.get("answers")
             if isinstance(answers, list) and answers:
                 _ensure_single_main_per_group(answers)
-                main_numbers = {a.get("number") for a in answers if a.get("isMain")}
+                # 메인 개수로 answerCount 동기화
+                main_numbers = {a.get("number") for a in answers if bool(a.get("isMain"))}
                 q["answerCount"] = max(1, len(main_numbers)) if main_numbers else 1
             continue
         if qtype == "FILL_BLANK":
@@ -312,15 +335,16 @@ def _sanitize_questions(questions: list[dict]) -> list[dict]:
         # 타입 누락 시 구조로 추론해서 보정
         if "choices" in q and isinstance(q.get("choices"), list):
             choices = q.get("choices")
-            correct_count = sum(1 for c in choices if bool(c.get("isCorrect")))
-            q["answerCount"] = max(0, correct_count)
+            if choices:
+                correct_count = sum(1 for c in choices if bool(c.get("isCorrect")))
+                q["answerCount"] = max(0, correct_count)
             continue
         if "answers" in q and isinstance(q.get("answers"), list):
             answers = q.get("answers")
             if answers:
                 _ensure_single_main_per_group(answers)
                 # SHORT/FILL_BLANK 공통: 메인 개수로 answerCount 동기화(존재 시)
-                main_numbers = {a.get("number") for a in answers if a.get("isMain")}
+                main_numbers = {a.get("number") for a in answers if bool(a.get("isMain"))}
                 if "answerCount" in q:
                     q["answerCount"] = max(1, len(main_numbers)) if main_numbers else 1
     return questions
@@ -401,7 +425,24 @@ async def generate_question_set(
                 return {"error": "모델 응답(JSON 추출본) 파싱에 실패했습니다."}
         if not isinstance(parsed, list):
             return {"error": "최상위 응답은 JSON 배열이어야 합니다."}
+        # 규칙 위반 보정
         sanitized = _sanitize_questions(parsed)
-        return {"content": sanitized}
+        # 디버깅: 보정 전후 비교
+        print(f"[DEBUG] 보정 전 SHORT/FILL_BLANK isMain 상태:")
+        for q in parsed:
+            qtype = q.get("questionType", "")
+            if qtype in ("SHORT", "FILL_BLANK"):
+                answers = q.get("answers", [])
+                for a in answers:
+                    print(f"  {qtype}: number={a.get('number')}, isMain={a.get('isMain')}, answer={a.get('answer', '')[:30]}")
+        print(f"[DEBUG] 보정 후 SHORT/FILL_BLANK isMain 상태:")
+        for q in sanitized:
+            qtype = q.get("questionType", "")
+            if qtype in ("SHORT", "FILL_BLANK"):
+                answers = q.get("answers", [])
+                for a in answers:
+                    print(f"  {qtype}: number={a.get('number')}, isMain={a.get('isMain')}, answer={a.get('answer', '')[:30]}")
+        # JSON 문자열로 직렬화하여 반환
+        return {"content": json.dumps(sanitized, ensure_ascii=False)}
     except Exception as e:
         return {"error": str(e)}
