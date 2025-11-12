@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
+import json
 from app.models.schemas import GenerateResponse, ParseFileResponse, ParseURLRequest, GenerateFromURLRequest
 from app.services.openai_service import generate_question_set
 from app.services.file_parser import parse_markdown, parse_pdf
@@ -30,11 +31,19 @@ async def parse_url_endpoint(req: ParseURLRequest):
     return ParseFileResponse(text=text)
 
 @router.post("/generate", response_model=GenerateResponse)
-async def generate_from_url_endpoint(req: GenerateFromURLRequest):
+async def generate_from_url_endpoint(req: GenerateFromURLRequest) -> GenerateResponse:
     try:
-        text = await parse_text_from_url(str(req.url))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        texts = []
+        for u in req.urls:
+            try:
+                text_part = await parse_text_from_url(str(u))
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"URL 처리 실패 ({u}): {e}")
+            texts.append(text_part)
+        text = "\n\n".join(texts)
+    except HTTPException:
+        # 위에서 이미 가공된 HTTPException은 그대로 전달
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"파일을 다운로드할 수 없습니다: {e}")
 
@@ -47,4 +56,10 @@ async def generate_from_url_endpoint(req: GenerateFromURLRequest):
     )
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
-    return GenerateResponse(content=result["content"])
+    content = result.get("content")
+    if isinstance(content, str):
+        try:
+            content = json.loads(content)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=500, detail="생성된 콘텐츠가 올바른 JSON이 아닙니다.")
+    return GenerateResponse(content=content)
