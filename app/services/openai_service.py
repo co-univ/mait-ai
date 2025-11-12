@@ -66,6 +66,9 @@ SYSTEM_PROMPT = """
 - choices는 항상 2개 이상
 - answerCount는 `isCorrect=true`인 선택지 개수와 일치
 - number는 1부터 시작하는 연속된 정수
+- 동일 의미의 답안 묶음은 같은 `number`를 사용
+- 각 `number` 묶음마다 `isMain=true`는 정확히 1개, 나머지는 같은 `number`로 `isMain=false`
+- `answerCount`는 서로 다른 `number`(=메인 답안) 개수와 정확히 일치
 - 정답 영역 표시는 선택지의 번호 기반(체크된 선택지의 number가 노출됨)
 
 ## 2. SHORT (단답형) JSON 형식
@@ -82,7 +85,7 @@ SYSTEM_PROMPT = """
       "isMain": true
     },
     {
-      "number": 2, 
+      "number": 1, 
       "answer": "정답의 인정답안(동의어/표기 변형)",
       "isMain": false
     }
@@ -94,6 +97,7 @@ SYSTEM_PROMPT = """
 - answers는 최소 1개 이상
 - 메인 답안은 `isMain=true`로 표시하며 최소 1개, 최대 5개
 - 인정답안은 `isMain=false`로 추가(동의어/표기 변형), 각 메인 답안별 최대 5개까지 허용
+- number가 같은 답안 사이에 main=true는 무조건 1개여야함.
 - 답안 삭제는 가능하나 최소 1개는 유지(1개일 때 삭제 불가)
 - answerCount는 1~5 사이 정수
   - 토글 off(조절 불가)일 때: 기본값은 메인 답안 개수와 동일
@@ -177,6 +181,33 @@ SYSTEM_PROMPT = """
 5. 각 유형의 기본/최대 개수 규칙을 따를 것(객관식 4 기본/최대 8, 주관식 메인 1 기본/최대 5, 빈칸은 content의 {{i}} 수에 따름, 순서 3 기본/최대 6)
 
 출력은 문제 객체들의 JSON 배열로 구성되어야 함. 각 객체는 위에서 정의한 형식을 따르며, 반드시 `questionType`을 포함해야 함. 개수가 0으로 지정된 유형은 포함하지 않음.
+
+# 최종 검증 체크리스트(반드시 자체 점검 후 JSON만 반환)
+- 전체 응답은 유효한 JSON 배열이어야 함(파싱 가능)
+- 모든 객체는 `questionType` ∈ {MULTIPLE, SHORT, FILL_BLANK, ORDERING}
+- 모든 문자열 필드는 비어있지 않음, 설명은 최대 00자 이하
+
+[MULTIPLE]
+- choices 길이: 2~8
+- `answerCount` == `isCorrect=true` 개수
+- `number`는 1부터 시작하는 연속 정수, 중복 없음
+
+[SHORT]
+- answers 길이 ≥ 1
+- `number`는 1부터 시작하는 연속 정수
+- 동일 `number` 묶음 내 `isMain=true`는 정확히 1개
+- 인정답안은 메인과 동일 `number`로 `isMain=false`
+- `answerCount` == 서로 다른 `number`(=메인 답안) 개수, 1~5 범위
+- 정답 영역에는 `isMain=true`인 항목만 해당 내용이 노출됨(인정답안 제외)
+
+[FILL_BLANK]
+- content의 `{{i}}` 인덱스와 answers의 `number`가 일치
+- 각 빈칸 번호마다 `isMain=true` 정확히 1개, 인정답안은 동일 번호 `isMain=false`
+
+[ORDERING]
+- options 길이: 2 이상(권장 기본 3, 최대 6)
+- `originOrder`는 1..N 연속, 중복 없음
+- `answerOrder`는 1..N 연속, 중복 없음
 
 ⚠️ 절대 JSON 이외의 설명이나 문장을 포함하지 마세요.
 """
