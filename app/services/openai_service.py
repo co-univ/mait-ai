@@ -66,9 +66,6 @@ SYSTEM_PROMPT = """
 - choices는 항상 2개 이상
 - answerCount는 `isCorrect=true`인 선택지 개수와 일치
 - number는 1부터 시작하는 연속된 정수
-- 동일 의미의 답안 묶음은 같은 `number`를 사용
-- 각 `number` 묶음마다 `isMain=true`는 정확히 1개, 나머지는 같은 `number`로 `isMain=false`
-- `answerCount`는 서로 다른 `number`(=메인 답안) 개수와 정확히 일치
 - 정답 영역 표시는 선택지의 번호 기반(체크된 선택지의 number가 노출됨)
 
 ## 2. SHORT (단답형) JSON 형식
@@ -97,19 +94,23 @@ SYSTEM_PROMPT = """
 - answers는 최소 1개 이상
 - 메인 답안은 `isMain=true`로 표시하며 최소 1개, 최대 5개
 - 인정답안은 `isMain=false`로 추가(동의어/표기 변형), 각 메인 답안별 최대 5개까지 허용
-- number가 같은 답안 사이에 main=true는 무조건 1개여야함.
+- 동일 의미의 답안 묶음은 같은 `number`를 사용
+- number가 같은 답안 묶음 내에서 `isMain=true`는 정확히 1개여야 함
 - 답안 삭제는 가능하나 최소 1개는 유지(1개일 때 삭제 불가)
 - answerCount는 1~5 사이 정수
   - 토글 off(조절 불가)일 때: 기본값은 메인 답안 개수와 동일
   - 토글 on(조절 가능)일 때: 1~5 범위에서 조절 가능
 - 정답 영역에는 메인 답안만 노출(인정답안 제외)
 - number는 1부터 시작하는 연속된 정수
+  - 금지: 모든 answers가 `isMain=false`인 상태
+    - 보정: 어떤 `number` 묶음에서든 `isMain=true`가 없으면, 해당 묶음의 첫 항목을 `isMain=true`로 변경
+    - 보정: 같은 `number`에서 `isMain=true`가 2개 이상이면 첫 항목만 `true`로 두고 나머지는 `false`로 변경
 
 ## 3. FILL_BLANK (빈칸 채우기) JSON 형식
 
 {
   "questionType": "FILL_BLANK",
-  "content": "이것은 {{0}} 입니다. 그리고 저것은 {{1}} 입니다.",
+  "content": "이것은 {{1}} 입니다. 그리고 저것은 {{2}} 입니다.",
   "explanation": "문제 해설 (선택사항, 최대 00자)",
   "answers": [
     {
@@ -138,6 +139,9 @@ SYSTEM_PROMPT = """
 - 같은 빈칸 번호에 대해 인정답안(`isMain=false`)을 여러 개 추가 가능(최대 5개)
 - 빈칸 삭제: 텍스트에서 백스페이스 1회 선택, 2회 삭제 또는 Minus 클릭 시 삭제
 - 정답 영역 표기 예시: "정답 (1) A, (2) B"
+  - 금지: 어떤 빈칸 번호에서도 `isMain=true`가 0개인 상태
+    - 보정: 해당 빈칸 번호에서 `isMain=true`가 없으면 첫 항목을 `isMain=true`로 변경
+    - 보정: 해당 번호에서 `isMain=true`가 2개 이상이면 첫 항목만 `true`로 두고 나머지는 `false`로 변경
 
 ## 4. ORDERING (순서 배열) JSON 형식
 
@@ -180,6 +184,18 @@ SYSTEM_PROMPT = """
 4. 숫자 필드는 0 이상의 정수
 5. 각 유형의 기본/최대 개수 규칙을 따를 것(객관식 4 기본/최대 8, 주관식 메인 1 기본/최대 5, 빈칸은 content의 {{i}} 수에 따름, 순서 3 기본/최대 6)
 
+## 생성 절차(필수 수행)
+1) 초안 생성
+2) 구조 검증
+   - JSON 파싱 가능 여부
+   - 필수 필드 존재 여부
+3) 규칙 정합성 보정
+   - SHORT: `number`별로 `isMain=true` 정확히 1개 보장(없으면 첫 항목을 true, 2개 이상이면 첫 항목만 true)
+   - FILL_BLANK: content의 모든 `{{i}}`에 대해 `number=i`의 `isMain=true` 정확히 1개 보장(없으면 첫 항목을 true, 2개 이상이면 첫 항목만 true)
+   - MULTIPLE: `answerCount == isCorrect=true 개수`
+   - ORDERING: originOrder/answerOrder의 1..N 연속성 보장
+4) 최종 검증 체크리스트 통과 후 JSON만 반환
+
 출력은 문제 객체들의 JSON 배열로 구성되어야 함. 각 객체는 위에서 정의한 형식을 따르며, 반드시 `questionType`을 포함해야 함. 개수가 0으로 지정된 유형은 포함하지 않음.
 
 # 최종 검증 체크리스트(반드시 자체 점검 후 JSON만 반환)
@@ -199,10 +215,12 @@ SYSTEM_PROMPT = """
 - 인정답안은 메인과 동일 `number`로 `isMain=false`
 - `answerCount` == 서로 다른 `number`(=메인 답안) 개수, 1~5 범위
 - 정답 영역에는 `isMain=true`인 항목만 해당 내용이 노출됨(인정답안 제외)
+  - 금지: 어떤 `number`에서도 `isMain=true`가 0개인 상태
 
 [FILL_BLANK]
 - content의 `{{i}}` 인덱스와 answers의 `number`가 일치
 - 각 빈칸 번호마다 `isMain=true` 정확히 1개, 인정답안은 동일 번호 `isMain=false`
+  - 금지: 어떤 빈칸 번호에서도 `isMain=true`가 0개인 상태
 
 [ORDERING]
 - options 길이: 2 이상(권장 기본 3, 최대 6)
