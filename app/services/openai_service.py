@@ -34,7 +34,7 @@ SYSTEM_PROMPT = """
 {
   "questionType": "MULTIPLE",
   "content": "문제 내용",
-  "explanation": "문제 해설 (선택사항)",
+  "explanation": "문제 해설 (선택사항, 최대 00자)",
   "answerCount": 1,
   "choices": [
     {
@@ -46,40 +46,59 @@ SYSTEM_PROMPT = """
       "number": 2,
       "content": "선택지 2 내용",
       "isCorrect": true
+    },
+    {
+      "number": 3,
+      "content": "선택지 3 내용",
+      "isCorrect": false
+    },
+    {
+      "number": 4,
+      "content": "선택지 4 내용",
+      "isCorrect": false
     }
   ]
 }
 
-**제약사항:**
-- choices는 최소 2개 이상
-- answerCount는 정답(isCorrect=true)인 선택지 개수와 일치해야 함
+**규칙/제약사항(유형 1 - 객관식):**
+- 기본 선택지 개수는 4개, 최대 8개까지 허용
+- 선택지 삭제 가능하나 최소 2개는 유지해야 함(2개일 땐 삭제 불가)
+- choices는 항상 2개 이상
+- answerCount는 `isCorrect=true`인 선택지 개수와 일치
 - number는 1부터 시작하는 연속된 정수
+- 정답 영역 표시는 선택지의 번호 기반(체크된 선택지의 number가 노출됨)
 
 ## 2. SHORT (단답형) JSON 형식
 
 {
   "questionType": "SHORT",
   "content": "문제 내용",
-  "explanation": "문제 해설 (선택사항)",
-  "answerCount": 2,
+  "explanation": "문제 해설 (선택사항, 최대 00자)",
+  "answerCount": 1,
   "answers": [
     {
       "number": 1,
-      "answer": "정답1",
+      "answer": "정답",
       "isMain": true
     },
     {
-      "number": 2,
-      "answer": "정답2",
+      "number": 2, 
+      "answer": "정답의 인정답안(동의어/표기 변형)",
       "isMain": false
     }
   ]
 }
 
-**제약사항:**
+**규칙/제약사항(유형 2 - 주관식):**
+- 기본 정답 개수는 1개(메인 답안 기준), 최대 5개까지 가능
 - answers는 최소 1개 이상
-- answerCount는 answers 배열의 길이와 일치해야 함
-- isMain이 true인 답은 정확히 1개만 존재해야 함
+- 메인 답안은 `isMain=true`로 표시하며 최소 1개, 최대 5개
+- 인정답안은 `isMain=false`로 추가(동의어/표기 변형), 각 메인 답안별 최대 5개까지 허용
+- 답안 삭제는 가능하나 최소 1개는 유지(1개일 때 삭제 불가)
+- answerCount는 1~5 사이 정수
+  - 토글 off(조절 불가)일 때: 기본값은 메인 답안 개수와 동일
+  - 토글 on(조절 가능)일 때: 1~5 범위에서 조절 가능
+- 정답 영역에는 메인 답안만 노출(인정답안 제외)
 - number는 1부터 시작하는 연속된 정수
 
 ## 3. FILL_BLANK (빈칸 채우기) JSON 형식
@@ -87,12 +106,17 @@ SYSTEM_PROMPT = """
 {
   "questionType": "FILL_BLANK",
   "content": "이것은 {{0}} 입니다. 그리고 저것은 {{1}} 입니다.",
-  "explanation": "문제 해설 (선택사항)",
+  "explanation": "문제 해설 (선택사항, 최대 00자)",
   "answers": [
     {
       "number": 1,
       "answer": "사과",
       "isMain": true
+    },
+    {
+      "number": 1,
+      "answer": "애플", 
+      "isMain": false
     },
     {
       "number": 2,
@@ -102,18 +126,21 @@ SYSTEM_PROMPT = """
   ]
 }
 
-**제약사항:**
-- content에서 빈칸은 `{{0}}` 형식으로 표시 (예: {{0}}, {{1}})
-- answers의 number는 content의 빈칸 번호와 일치해야 함
-- 각 빈칸 번호마다 isMain이 true인 답이 정확히 1개씩 존재해야 함
-- 같은 빈칸(number)에 대해 여러 정답을 추가할 수 있음 (동의어 등)
+**규칙/제약사항(유형 3 - 빈칸 넣기):**
+- 질문 작성 중 '빈칸 추가' 시 `{{i}}` 형태의 새 빈칸 생성(i는 0부터 시작)
+- content의 빈칸 번호는 좌→우, 상→하 순으로 증가하며 앞쪽 빈칸이 앞 번호
+- answers의 `number`는 content의 빈칸 번호와 일치해야 함
+- 각 빈칸 번호마다 메인 답안(`isMain=true`)은 정확히 1개
+- 같은 빈칸 번호에 대해 인정답안(`isMain=false`)을 여러 개 추가 가능(최대 5개)
+- 빈칸 삭제: 텍스트에서 백스페이스 1회 선택, 2회 삭제 또는 Minus 클릭 시 삭제
+- 정답 영역 표기 예시: "정답 (1) A, (2) B"
 
 ## 4. ORDERING (순서 배열) JSON 형식
 
 {
   "questionType": "ORDERING",
   "content": "다음 단계를 올바른 순서로 배열하세요",
-  "explanation": "문제 해설 (선택사항)",
+  "explanation": "문제 해설 (선택사항, 최대 00자)",
   "options": [
     {
       "originOrder": 1,
@@ -124,22 +151,30 @@ SYSTEM_PROMPT = """
       "originOrder": 2,
       "content": "냄비를 준비한다",
       "answerOrder": 1
+    },
+    {
+      "originOrder": 3,
+      "content": "면을 넣는다",
+      "answerOrder": 3
     }
   ]
 }
 
-**제약사항:**
-- options는 최소 2개 이상
-- originOrder: 화면에 보여지는 순서 (1부터 시작)
-- answerOrder: 정답이 되는 실제 순서 (1부터 시작)
-- originOrder와 answerOrder는 각각 1부터 시작하는 연속된 정수여야 함
+**규칙/제약사항(유형 4 - 순서):**
+- 기본 답안(보기) 개수 3개, 최대 6개까지 가능
+- 보기 필드와 정답 필드는 구분되며, 보기는 화면에 알파벳 표기(A,B,C,...)가 자동 부여됨(알파벳 자체는 모델이 생성하지 않음)
+- 정답 입력은 알파벳이 아닌 `answerOrder` 수치로 표현(1부터 시작)
+- `originOrder`: 화면 표기 순서(1부터 시작, 연속 정수)
+- `answerOrder`: 정답 순서(1부터 시작, 연속 정수)
+- 정답 영역 노출 형식: "A,B,C,D" (UI에서 알파벳 매핑)
 
 # 공통 제약사항
 
 1. content는 필수이며 TEXT 형식 (긴 텍스트 가능)
-2. explanation과 imageUrl은 선택사항
+2. explanation은 선택사항이며 최대 00자
 3. 모든 문자열은 비어있지 않아야 함
 4. 숫자 필드는 0 이상의 정수
+5. 각 유형의 기본/최대 개수 규칙을 따를 것(객관식 4 기본/최대 8, 주관식 메인 1 기본/최대 5, 빈칸은 content의 {{i}} 수에 따름, 순서 3 기본/최대 6)
 
 출력은 문제 객체들의 JSON 배열로 구성되어야 함. 각 객체는 위에서 정의한 형식을 따르며, 반드시 `questionType`을 포함해야 함. 개수가 0으로 지정된 유형은 포함하지 않음.
 
