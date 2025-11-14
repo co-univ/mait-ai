@@ -1,10 +1,96 @@
 # 공통 유틸 함수(로깅 설정, 예외 헬퍼 등)를 이곳에 작성하세요.
 import httpx
 import boto3
+import logging
+import sys
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse, unquote
 from app.services.file_parser import parse_pdf, parse_raw_by_extension
+
+# MDC처럼 동작하는 context variable (Spring의 MDC와 유사)
+request_id_context: ContextVar[str] = ContextVar("request_id", default="")
+
+
+class RequestIDFormatter(logging.Formatter):
+    """
+    로그 포맷에 request_id를 자동으로 포함시키는 Formatter
+    Spring의 MDC처럼 동작
+    """
+    
+    def format(self, record: logging.LogRecord) -> str:
+        # context에서 request_id 가져오기
+        request_id = request_id_context.get("")
+        
+        # request_id가 있으면 로그 메시지에 포함
+        if request_id:
+            record.request_id = request_id
+        else:
+            record.request_id = "-"
+        
+        return super().format(record)
+
+
+def setup_logging(log_level: str = "INFO", log_format: str = None):
+    """
+    애플리케이션 전역 로깅 설정
+    
+    Args:
+        log_level: 로그 레벨 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        log_format: 로그 포맷 문자열 (None이면 기본 포맷 사용)
+    """
+    if log_format is None:
+        # request_id를 포함한 포맷
+        log_format = "%(asctime)s - %(name)s - %(levelname)s - [request_id=%(request_id)s] - %(message)s"
+    
+    # Custom Formatter 사용
+    formatter = RequestIDFormatter(log_format)
+    
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+    
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        handlers=[handler]
+    )
+    
+    # uvicorn과 FastAPI의 로그 레벨도 조정
+    logging.getLogger("uvicorn").setLevel(logging.INFO)
+    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+    logging.getLogger("fastapi").setLevel(logging.INFO)
+
+
+def set_request_id(request_id: str):
+    """
+    현재 context에 request_id 설정 (MDC.put과 유사)
+    
+    Args:
+        request_id: 설정할 request_id
+    """
+    request_id_context.set(request_id)
+
+
+def get_request_id() -> str:
+    """
+    현재 context에서 request_id 가져오기 (MDC.get과 유사)
+    
+    Returns:
+        현재 context의 request_id, 없으면 빈 문자열
+    """
+    return request_id_context.get("")
+
+def get_logger(name: str) -> logging.Logger:
+    """
+    모듈별 logger 인스턴스 반환
+    
+    Args:
+        name: 보통 __name__ 사용
+        
+    Returns:
+        Logger 인스턴스
+    """
+    return logging.getLogger(name)
 
 async def download_file_from_url(url: str) -> bytes:
     async with httpx.AsyncClient() as client:

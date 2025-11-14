@@ -1,9 +1,11 @@
 from openai import OpenAI
 from app.config import settings
+from app.utils.utils import get_logger
 import json
 import re
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
+logger = get_logger(__name__)
 
 SYSTEM_PROMPT = """
 너는 교육용 문제를 생성하는 AI 출제 도우미야.
@@ -291,19 +293,19 @@ def _ensure_single_main_per_group(answers: list[dict]) -> None:
         if not true_indices:
             # 메인 없음: 첫 항목을 메인으로 설정
             keep_idx = indices[0]
-            print(f"[SANITIZER] number={num} 그룹에 메인 없음 → 인덱스 {keep_idx}를 main=True로 설정")
+            logger.debug(f"[SANITIZER] number={num} 그룹에 메인 없음 → 인덱스 {keep_idx}를 main=True로 설정")
             for i in indices:
                 answers[i]["main"] = True if (i == keep_idx) else False
             # 보정 후 확인
-            print(f"[SANITIZER] 보정 후 확인: {[(answers[j].get('answer', '')[:20], answers[j].get('main')) for j in indices]}")
+            logger.debug(f"[SANITIZER] 보정 후 확인: {[(answers[j].get('answer', '')[:20], answers[j].get('main')) for j in indices]}")
         elif len(true_indices) > 1:
             # 메인 2개 이상: 첫 메인만 유지, 나머지 false
             keep_idx = true_indices[0]
-            print(f"[SANITIZER] number={num} 그룹에 메인 {len(true_indices)}개 → 인덱스 {keep_idx}만 유지, 나머지 False")
+            logger.debug(f"[SANITIZER] number={num} 그룹에 메인 {len(true_indices)}개 → 인덱스 {keep_idx}만 유지, 나머지 False")
             for i in indices:
                 answers[i]["main"] = True if (i == keep_idx) else False
             # 보정 후 확인
-            print(f"[SANITIZER] 보정 후 확인: {[(answers[j].get('answer', '')[:20], answers[j].get('main')) for j in indices]}")
+            logger.debug(f"[SANITIZER] 보정 후 확인: {[(answers[j].get('answer', '')[:20], answers[j].get('main')) for j in indices]}")
         # 이미 정확히 1개면 수정 불필요
 
 def _sanitize_questions(questions: list[dict]) -> list[dict]:
@@ -313,32 +315,32 @@ def _sanitize_questions(questions: list[dict]) -> list[dict]:
     - MULTIPLE: answerCount를 isCorrect 개수로 동기화
     """
     if not questions:
-        print("[SANITIZER] questions가 비어있음")
+        logger.warning("[SANITIZER] questions가 비어있음")
         return questions
-    print(f"[SANITIZER] 총 {len(questions)}개 문제 처리 시작")
+    logger.debug(f"[SANITIZER] 총 {len(questions)}개 문제 처리 시작")
     for idx, q in enumerate(questions):
         if not isinstance(q, dict):
-            print(f"[SANITIZER] 인덱스 {idx}: dict가 아님, 스킵")
+            logger.warning(f"[SANITIZER] 인덱스 {idx}: dict가 아님, 스킵")
             continue
         qtype = q.get("questionType", "").upper()
-        print(f"[SANITIZER] 인덱스 {idx}: questionType={qtype}")
+        logger.debug(f"[SANITIZER] 인덱스 {idx}: questionType={qtype}")
         # 타입이 명시된 경우
         if qtype == "SHORT":
             answers = q.get("answers")
             if isinstance(answers, list) and answers:
-                print(f"[SANITIZER] SHORT 처리: {len(answers)}개 답안")
+                logger.debug(f"[SANITIZER] SHORT 처리: {len(answers)}개 답안")
                 _ensure_single_main_per_group(answers)
                 # 메인 개수로 answerCount 동기화
                 main_numbers = {a.get("number") for a in answers if bool(a.get("main"))}
                 q["answerCount"] = max(1, len(main_numbers)) if main_numbers else 1
-                print(f"[SANITIZER] SHORT 보정 완료: answerCount={q['answerCount']}")
+                logger.debug(f"[SANITIZER] SHORT 보정 완료: answerCount={q['answerCount']}")
             continue
         if qtype == "FILL_BLANK":
             answers = q.get("answers")
             if isinstance(answers, list) and answers:
-                print(f"[SANITIZER] FILL_BLANK 처리: {len(answers)}개 답안")
+                logger.debug(f"[SANITIZER] FILL_BLANK 처리: {len(answers)}개 답안")
                 _ensure_single_main_per_group(answers)
-                print(f"[SANITIZER] FILL_BLANK 보정 완료")
+                logger.debug(f"[SANITIZER] FILL_BLANK 보정 완료")
             continue
         if qtype == "MULTIPLE":
             choices = q.get("choices")
@@ -397,6 +399,8 @@ async def generate_question_set(
     counts: dict[str, int] | None = None,
 ):
     try:
+        logger.info(f"[OPENAI_API_CALL] model=gpt-4.1-mini | topic={topic} | difficulty={difficulty} | material_length={len(material)}")
+        
         response = client.responses.create(
             model="gpt-4.1-mini",
             input=[
@@ -408,7 +412,7 @@ async def generate_question_set(
         )
         # return {"json": response.output[0].content[0].text}
 
-        print(response)
+        logger.debug(f"[OPENAI_RESPONSE] response_type={type(response).__name__}")
 
         # ✅ 안전하게 output 확인
         if not hasattr(response, "output") or not response.output:
@@ -442,35 +446,35 @@ async def generate_question_set(
         # 디버깅: 보정 전 상태 (깊은 복사로 보존)
         import copy
         parsed_copy = copy.deepcopy(parsed)
-        print(f"[DEBUG] 보정 전 SHORT/FILL_BLANK main 상태:")
+        logger.debug(f"[DEBUG] 보정 전 SHORT/FILL_BLANK main 상태:")
         for q in parsed_copy:
             qtype = q.get("questionType", "")
             if qtype in ("SHORT", "FILL_BLANK"):
                 answers = q.get("answers", [])
                 for a in answers:
-                    print(f"  {qtype}: number={a.get('number')}, main={a.get('main')}, answer={a.get('answer', '')[:30]}")
+                    logger.debug(f"  {qtype}: number={a.get('number')}, main={a.get('main')}, answer={a.get('answer', '')[:30]}")
         # 규칙 위반 보정 (in-place 수정)
         sanitized = _sanitize_questions(parsed)
-        print(f"[DEBUG] 보정 후 SHORT/FILL_BLANK main 상태:")
+        logger.debug(f"[DEBUG] 보정 후 SHORT/FILL_BLANK main 상태:")
         for q in sanitized:
             qtype = q.get("questionType", "")
             if qtype in ("SHORT", "FILL_BLANK"):
                 answers = q.get("answers", [])
                 for a in answers:
-                    print(f"  {qtype}: number={a.get('number')}, main={a.get('main')}, answer={a.get('answer', '')[:30]}")
+                    logger.debug(f"  {qtype}: number={a.get('number')}, main={a.get('main')}, answer={a.get('answer', '')[:30]}")
         # JSON 문자열로 직렬화하여 반환
         json_str = json.dumps(sanitized, ensure_ascii=False)
         # 직렬화 후 값 확인 (디버깅)
         try:
             verify = json.loads(json_str)
-            print(f"[DEBUG] JSON 직렬화 후 검증:")
+            logger.debug(f"[DEBUG] JSON 직렬화 후 검증:")
             for q in verify:
                 qtype = q.get("questionType", "")
                 if qtype in ("SHORT", "FILL_BLANK"):
                     answers = q.get("answers", [])
                     for a in answers:
                         is_main = a.get("main")
-                        print(f"  {qtype}: number={a.get('number')}, main={is_main} (type: {type(is_main).__name__}), answer={a.get('answer', '')[:30]}")
+                        logger.debug(f"  {qtype}: number={a.get('number')}, main={is_main} (type: {type(is_main).__name__}), answer={a.get('answer', '')[:30]}")
             # JSON 문자열에서 SHORT/FILL_BLANK의 main 값 직접 확인
             import re
             # SHORT/FILL_BLANK 문제의 main 값 추출
@@ -484,12 +488,13 @@ async def generate_question_set(
                     if match:
                         answers_json = match.group(1)
                         is_main_values = re.findall(r'"main":\s*(true|false)', answers_json)
-                        print(f"  {qtype} ({q_content}): JSON 문자열의 main 값들 = {is_main_values}")
+                        logger.debug(f"  {qtype} ({q_content}): JSON 문자열의 main 값들 = {is_main_values}")
         except Exception as e:
-            print(f"[DEBUG] JSON 검증 실패: {e}")
+            logger.debug(f"[DEBUG] JSON 검증 실패: {e}")
+        logger.info(f"[GENERATION_SUCCESS] question_count={len(sanitized)}")
         return {"content": json_str}
     except Exception as e:
         import traceback
         error_detail = f"{str(e)}\n{traceback.format_exc()}"
-        print(f"[ERROR] generate_question_set 실패: {error_detail}")
+        logger.error(f"[ERROR] generate_question_set 실패: {error_detail}")
         return {"error": f"문제 생성 중 오류가 발생했습니다: {str(e)}"}
