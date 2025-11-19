@@ -84,9 +84,9 @@ jobs:
       - name: Verify deployment
         uses: appleboy/ssh-action@v0.1.10
         with:
-          host: ${{ secrets.PROD_EC2_HOST }}
-          username: ${{ secrets.PROD_EC2_USERNAME }}
-          key: ${{ secrets.PROD_EC2_SSH_KEY }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             echo "⏳ 서버 시작 대기 중..."
             sleep 10
