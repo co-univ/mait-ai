@@ -46,13 +46,36 @@ jobs:
           cache-from: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.DOCKER_IMAGE }}:buildcache,mode=max
 
+      # 5️⃣-1 DDNS → Public DNS로 IP 조회
+      - name: Resolve DDNS host to IP (public DNS)
+        id: resolve_dev_host
+        run: |
+          if ! command -v dig >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y dnsutils
+          fi
+
+          HOST="${{ secrets.DEV_SERVER_HOST }}"
+          IP="$(dig @1.1.1.1 +short "${HOST}" | head -n 1)"
+          if [ -z "${IP}" ]; then
+            IP="$(dig @8.8.8.8 +short "${HOST}" | head -n 1)"
+          fi
+
+          if [ -z "${IP}" ]; then
+            echo "❌ DDNS 호스트에서 IP를 찾지 못했습니다: ${HOST}"
+            exit 1
+          fi
+
+          echo "✅ resolved_ip=${IP}"
+          echo "ip=${IP}" >> "${GITHUB_OUTPUT}"
+
       # 6️⃣ EC2 배포
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v0.1.10
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ steps.resolve_dev_host.outputs.ip }}
+          username: ${{ secrets.DEV_SERVER_USERNAME }}
+          key: ${{ secrets.DEV_SERVER_PRIVATE_KEY }}
           script: |
             echo "🚀 배포 시작..."
 
@@ -84,9 +107,9 @@ jobs:
       - name: Verify deployment
         uses: appleboy/ssh-action@v0.1.10
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          host: ${{ steps.resolve_dev_host.outputs.ip }}
+          username: ${{ secrets.DEV_SERVER_USERNAME }}
+          key: ${{ secrets.DEV_SERVER_PRIVATE_KEY }}
           script: |
             echo "⏳ 서버 시작 대기 중..."
             sleep 10
