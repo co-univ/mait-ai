@@ -111,19 +111,3 @@ jobs:
             # 주석: 향후 개선
             # - 헬스체크를 3회 반복 시도하도록 개선 가능 (ex: for i in {1..5}; do curl ...)
 
-      # 8️⃣ 성공 시 알림
-      - name: Deployment success notification
-        if: success()
-        run: |
-          echo "🎉 =================================="
-          echo "✅ Production 배포가 성공적으로 완료되었습니다!"
-          echo "=================================="
-
-      # 9️⃣ 실패 시 알림
-      - name: Deployment failure notification
-        if: failure()
-        run: |
-          echo "❌ =================================="
-          echo "Production 배포에 실패했습니다."
-          echo "=================================="
-
