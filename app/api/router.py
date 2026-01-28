@@ -68,16 +68,15 @@ async def generate_from_url_endpoint(req: GenerateFromURLRequest, request: Reque
                 logger.debug(f"[URL_PARSED] url={u} | text_length={len(text_part)}")
             except Exception as e:
                 logger.error(f"[URL_ERROR] url={u} | error={str(e)}")
-                raise HTTPException(status_code=400, detail=f"URL 처리 실패 ({u}): {e}")
+                # URL 처리 실패 시에도 에러를 내지 않고 진행 (빈 텍스트로 처리되거나 다른 URL 내용만 사용)
+                continue
             texts.append(text_part)
         text = "\n\n".join(texts)
         logger.info(f"[TEXT_PREPARED] total_text_length={len(text)}")
-    except HTTPException:
-        # 위에서 이미 가공된 HTTPException은 그대로 전달
-        raise
     except Exception as e:
         logger.error(f"[PREPARE_ERROR] error={str(e)}")
-        raise HTTPException(status_code=400, detail=f"파일을 다운로드할 수 없습니다: {e}")
+        # 텍스트 준비 중 에러가 나도, 빈 텍스트로 AI 생성 시도
+        text = ""
 
     logger.info(f"[AI_GENERATION_START]")
     ai_start_time = time.time()
