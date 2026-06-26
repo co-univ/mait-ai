@@ -55,7 +55,7 @@ async def generate_from_url_endpoint(req: GenerateFromURLRequest, request: Reque
     
     # request_id는 자동으로 로그에 포함되므로 메시지에서 제거 가능
     logger.info(
-        f"[REQUEST_START] subject={req.subject} | difficulty={req.difficulty} | "
+        f"[REQUEST_START] title={req.title} | difficulty={req.difficulty} | "
         f"urls_count={len(req.urls)} | counts={req.counts} | "
         f"client_ip={request.client.host if request.client else 'unknown'}"
     )
@@ -82,7 +82,7 @@ async def generate_from_url_endpoint(req: GenerateFromURLRequest, request: Reque
     ai_start_time = time.time()
     
     result = await generate_question_set(
-        req.subject,
+        req.title,
         req.difficulty,
         text,
         req.instruction,
