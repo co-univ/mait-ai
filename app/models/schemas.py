@@ -66,7 +66,7 @@ class ParseURLRequest(BaseModel):
     url: HttpUrl
 
 class GenerateFromURLRequest(BaseModel):
-    subject: str
+    title: str
     difficulty: str
     urls: List[HttpUrl]
     instruction: str = Field(
